@@ -2,8 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-void main() {
-  runApp(UtipApp());
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await SystemChrome.setPreferredOrientations([
+    DeviceOrientation.portraitUp,
+  ]);
+
+  runApp(const UtipApp());
 }
 
 class UtipApp extends StatefulWidget {
@@ -14,10 +19,8 @@ class UtipApp extends StatefulWidget {
 }
 
 class UtipAppState extends State<UtipApp> {
-  // Boolean to track the current theme (light or dark)
   bool _isDarkMode = false;
 
-  // Define colors for light and dark mode
   final Color primaryColor =
       Color(0xFF99DB8F); // Light mode primary color (green)
   final Color darkModeColor =
@@ -28,7 +31,7 @@ class UtipAppState extends State<UtipApp> {
   @override
   void initState() {
     super.initState();
-    _loadThemePreference(); // Load saved theme preference
+    _loadThemePreference();
   }
 
   // Function to load saved theme preference
@@ -73,10 +76,10 @@ class UtipAppState extends State<UtipApp> {
                 ),
               ),
             ),
-      debugShowCheckedModeBanner: false, // Remove the debug banner
+      debugShowCheckedModeBanner: false,
       home: TipCalculator(
         isDarkMode: _isDarkMode,
-        onThemeToggle: _toggleTheme, // Pass the callback to toggle the theme
+        onThemeToggle: _toggleTheme,
         primaryColor: primaryColor,
         darkModeColor: darkModeColor,
       ),
@@ -123,15 +126,23 @@ class TipCalculatorState extends State<TipCalculator> {
   final FocusNode _billFocusNode = FocusNode(); // Add FocusNode
 
   void calculate() {
-    setState(() {
-      bill = double.tryParse(_billController.text) ?? 0.0;
-      if (bill > 0) {
-        tipAmount = bill * (tipPercent / 100);
-        totalAmount = bill + tipAmount;
-      }
+  setState(() {
+    final text = _billController.text.trim();
+    bill = double.tryParse(text) ?? 0.0;
+
+    if (bill > 0) {
+      tipAmount = bill * (tipPercent / 100);
+      totalAmount = bill + tipAmount;
+      // keep current rounding state as-is
+    } else {
+      // When input is empty or zero, clear computed values & rounding state
+      tipAmount = 0.0;
+      totalAmount = 0.0;
+      roundedTipPercent = 0.0;
       isRounding = false;
-    });
-  }
+    }
+  });
+}
 
   void roundUp() {
     if (bill > 0) {
@@ -172,7 +183,7 @@ class TipCalculatorState extends State<TipCalculator> {
   @override
   void dispose() {
     _billController.dispose();
-    _billFocusNode.dispose(); // Dispose the FocusNode
+    _billFocusNode.dispose();
     super.dispose();
   }
 
@@ -243,15 +254,15 @@ class TipCalculatorState extends State<TipCalculator> {
                           width: 100,
                           child: TextField(
                             controller: _billController,
-                            focusNode: _billFocusNode, // Attach FocusNode
+                            focusNode: _billFocusNode,
                             keyboardType: TextInputType.numberWithOptions(
                                 decimal:
-                                    true), // Numeric keyboard with decimal support
+                                    true),
                             inputFormatters: [
                               FilteringTextInputFormatter.allow(RegExp(
-                                  r'^\d+\.?\d{0,2}')), // Allow numbers with 2 decimal places
+                                  r'^\d+\.?\d{0,2}')),
                               LengthLimitingTextInputFormatter(
-                                  10), // Limit the input to 10 characters
+                                  10),
                             ],
                             onChanged: (_) => calculate(),
                             style: TextStyle(
@@ -259,19 +270,19 @@ class TipCalculatorState extends State<TipCalculator> {
                               fontWeight: _billController.text.isEmpty
                                   ? FontWeight.normal
                                   : FontWeight
-                                      .bold, // Change style after user inputs text
+                                      .bold, 
                               color: widget.isDarkMode
                                   ? Colors.white
                                   : Colors.black,
                             ),
                             decoration: InputDecoration(
                               hintText: 'Enter Bill',
-                              prefixText: '\$', // Display the dollar sign
+                              prefixText: '\$', 
                               hintStyle: TextStyle(
                                 color: widget.isDarkMode
                                     ? Colors.white
                                     : Colors
-                                        .black, // Hint color changes based on the theme
+                                        .black,
                               ),
                             ),
                           ),
