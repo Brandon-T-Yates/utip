@@ -16,7 +16,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
 # In Windows, build-name is used as the major, minor, and patch parts
 # of the product and file versions while build-number is used as the build suffix.
-version: 1.0.0+1
+version: 1.0.2+3
 
 environment:
   sdk: ^3.6.0
@@ -40,12 +40,23 @@ dev_dependencies:
   flutter_test:
     sdk: flutter
 
-  # The "flutter_lints" package below contains a set of recommended lints to
-  # encourage good coding practices. The lint set provided by the package is
-  # activated in the `analysis_options.yaml` file located at the root of your
-  # package. See that file for information about deactivating specific lint
-  # rules and activating additional ones.
+  flutter_launcher_icons: ^0.13.1
   flutter_lints: ^5.0.0
+
+flutter_launcher_icons:
+  android: true
+  ios: true
+
+  # iOS + legacy Android fallback (use your 1024×1024 square with green bg)
+  image_path_android: lib/assets/icon/uTipIcon.png
+  image_path_ios:     lib/assets/icon/uTipIcon.png
+
+  # Proper adaptive icon (full-bleed)
+  adaptive_icon_background: "#99DB8F"
+  adaptive_icon_foreground: lib/assets/icon/utip_fg3.png
+
+  remove_alpha_ios: true
+  min_sdk_android: 21
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec

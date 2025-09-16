@@ -1,4 +1,4 @@
-package com.example.utip
+package com.tyates.utip
 
 import io.flutter.embedding.android.FlutterActivity
 
