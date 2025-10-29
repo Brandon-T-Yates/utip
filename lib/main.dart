@@ -102,7 +102,7 @@ class UtipAppState extends State<UtipApp> {
         final mq = MediaQuery.of(context);
         return MediaQuery(
           data: mq.copyWith(
-            textScaleFactor: scaleFactor,
+            textScaler: TextScaler.linear(scaleFactor),
           ),
           child: child ?? const SizedBox.shrink(),
         );
@@ -324,17 +324,15 @@ class TipCalculatorState extends State<TipCalculator> {
                             decoration: InputDecoration(
                               hintText: 'Enter Bill',
                               prefixText: '\$',
-                              // Announce this clearly to screen readers
-                              labelText: 'Bill amount',
                               labelStyle: TextStyle(
-                                color: textOnPanel.withOpacity(0.8),
+                                color: textOnPanel.withValues(alpha: 0.8),
                               ),
                               hintStyle: TextStyle(
-                                color: textOnPanel.withOpacity(0.7),
+                                color: textOnPanel.withValues(alpha: 0.8),
                               ),
                               enabledBorder: UnderlineInputBorder(
                                 borderSide: BorderSide(
-                                  color: textOnPanel.withOpacity(0.5),
+                                  color: textOnPanel.withValues(alpha: 0.8),
                                 ),
                               ),
                               focusedBorder: UnderlineInputBorder(
