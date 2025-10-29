@@ -20,84 +20,111 @@ class UtipApp extends StatefulWidget {
 
 class UtipAppState extends State<UtipApp> {
   bool _isDarkMode = false;
+  bool _isLargeText = false; // NEW
 
-  final Color primaryColor =
-      Color(0xFF99DB8F); // Light mode primary color (green)
-  final Color darkModeColor =
-      Color.fromARGB(255, 26, 126, 26); // Dark mode primary color (dark green)
-  final Color darkBackgroundColor =
-      Color(0xFF121212); // Lighter black background color in dark mode
+  final Color primaryColor = const Color(0xFF99DB8F);
+  final Color darkModeColor = const Color.fromARGB(255, 64, 165, 64);
+  final Color darkBackgroundColor = const Color(0xFF121212);
 
   @override
   void initState() {
     super.initState();
-    _loadThemePreference();
+    _loadPrefs();
   }
 
-  // Function to load saved theme preference
-  void _loadThemePreference() async {
+  Future<void> _loadPrefs() async {
     final prefs = await SharedPreferences.getInstance();
     setState(() {
-      _isDarkMode = prefs.getBool('isDarkMode') ??
-          false; // Default to light mode if not saved
+      _isDarkMode = prefs.getBool('isDarkMode') ?? false;
+      _isLargeText = prefs.getBool('isLargeText') ?? false;
     });
   }
 
-  // Function to save theme preference
-  void _saveThemePreference(bool isDarkMode) async {
+  Future<void> _saveThemePreference(bool isDarkMode) async {
     final prefs = await SharedPreferences.getInstance();
-    prefs.setBool('isDarkMode', isDarkMode);
+    await prefs.setBool('isDarkMode', isDarkMode);
+  }
+
+  Future<void> _saveTextScalePreference(bool isLargeText) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('isLargeText', isLargeText);
+  }
+
+  void _toggleTheme() {
+    setState(() {
+      _isDarkMode = !_isDarkMode;
+    });
+    _saveThemePreference(_isDarkMode);
+  }
+
+  void _toggleTextScale() {
+    setState(() {
+      _isLargeText = !_isLargeText;
+    });
+    _saveTextScalePreference(_isLargeText);
   }
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'uTip',
-      theme: _isDarkMode
-          ? ThemeData.dark().copyWith(
-              primaryColor: darkModeColor, // Use dark green in dark mode
-              scaffoldBackgroundColor:
-                  darkBackgroundColor, // Set a lighter black background
-              elevatedButtonTheme: ElevatedButtonThemeData(
-                style: ElevatedButton.styleFrom(
-                  foregroundColor: Colors.white,
-                  backgroundColor:
-                      darkModeColor, // White text color in dark mode
-                ),
-              ),
-            )
-          : ThemeData.light().copyWith(
-              primaryColor: primaryColor, // Use light green in light mode
-              elevatedButtonTheme: ElevatedButtonThemeData(
-                style: ElevatedButton.styleFrom(
-                  foregroundColor: Colors.black,
-                  backgroundColor:
-                      primaryColor, // Black text color in light mode
-                ),
+    // Pick a scale factor. You can tune these numbers.
+    // 1.0 = normal, 1.3 = large (still fits on small screens)
+    final double scaleFactor = _isLargeText ? 1.3 : 1.0;
+
+    final ThemeData baseTheme = _isDarkMode
+        ? ThemeData.dark().copyWith(
+            primaryColor: darkModeColor,
+            scaffoldBackgroundColor: darkBackgroundColor,
+            elevatedButtonTheme: ElevatedButtonThemeData(
+              style: ElevatedButton.styleFrom(
+                foregroundColor: Colors.white,
+                backgroundColor: darkModeColor,
               ),
             ),
+          )
+        : ThemeData.light().copyWith(
+            primaryColor: primaryColor,
+            scaffoldBackgroundColor: Colors.white,
+            elevatedButtonTheme: ElevatedButtonThemeData(
+              style: ElevatedButton.styleFrom(
+                foregroundColor: Colors.black,
+                backgroundColor: primaryColor,
+              ),
+            ),
+          );
+
+    return MaterialApp(
+      title: 'uTip',
+      theme: baseTheme,
       debugShowCheckedModeBanner: false,
+
+      // builder lets us inject our own MediaQuery to scale text app-wide
+      builder: (context, child) {
+        final mq = MediaQuery.of(context);
+        return MediaQuery(
+          data: mq.copyWith(
+            textScaleFactor: scaleFactor,
+          ),
+          child: child ?? const SizedBox.shrink(),
+        );
+      },
+
       home: TipCalculator(
         isDarkMode: _isDarkMode,
         onThemeToggle: _toggleTheme,
         primaryColor: primaryColor,
         darkModeColor: darkModeColor,
+        isLargeText: _isLargeText,          // pass down
+        onTextScaleToggle: _toggleTextScale // pass down
       ),
     );
-  }
-
-  // Function to toggle between light and dark themes
-  void _toggleTheme() {
-    setState(() {
-      _isDarkMode = !_isDarkMode;
-      _saveThemePreference(_isDarkMode); // Save the user's theme preference
-    });
   }
 }
 
 class TipCalculator extends StatefulWidget {
   final bool isDarkMode;
+  final bool isLargeText; // NEW
   final VoidCallback onThemeToggle;
+  final VoidCallback onTextScaleToggle; // NEW
   final Color primaryColor;
   final Color darkModeColor;
 
@@ -107,6 +134,8 @@ class TipCalculator extends StatefulWidget {
     required this.onThemeToggle,
     required this.primaryColor,
     required this.darkModeColor,
+    required this.isLargeText,
+    required this.onTextScaleToggle,
   });
 
   @override
@@ -114,7 +143,6 @@ class TipCalculator extends StatefulWidget {
 }
 
 class TipCalculatorState extends State<TipCalculator> {
-  // Initial values
   double bill = 0.0;
   double tipPercent = 15.0;
   double tipAmount = 0.0;
@@ -123,56 +151,7 @@ class TipCalculatorState extends State<TipCalculator> {
   bool isRounding = false;
 
   final TextEditingController _billController = TextEditingController();
-  final FocusNode _billFocusNode = FocusNode(); // Add FocusNode
-
-  void calculate() {
-  setState(() {
-    final text = _billController.text.trim();
-    bill = double.tryParse(text) ?? 0.0;
-
-    if (bill > 0) {
-      tipAmount = bill * (tipPercent / 100);
-      totalAmount = bill + tipAmount;
-      // keep current rounding state as-is
-    } else {
-      // When input is empty or zero, clear computed values & rounding state
-      tipAmount = 0.0;
-      totalAmount = 0.0;
-      roundedTipPercent = 0.0;
-      isRounding = false;
-    }
-  });
-}
-
-  void roundUp() {
-    if (bill > 0) {
-      double tempTotal = totalAmount;
-      int roundedUpTotal = tempTotal.ceil();
-      double adjustedTipPercent = (roundedUpTotal - bill) / bill * 100;
-
-      setState(() {
-        roundedTipPercent = adjustedTipPercent;
-        tipPercent = roundedTipPercent.clamp(0.0, 30.0);
-        calculate();
-        isRounding = true;
-      });
-    }
-  }
-
-  void roundDown() {
-    if (bill > 0) {
-      double tempTotal = totalAmount;
-      int roundedDownTotal = tempTotal.floor();
-      double adjustedTipPercent = (roundedDownTotal - bill) / bill * 100;
-
-      setState(() {
-        roundedTipPercent = adjustedTipPercent;
-        tipPercent = roundedTipPercent.clamp(0.0, 30.0);
-        calculate();
-        isRounding = true;
-      });
-    }
-  }
+  final FocusNode _billFocusNode = FocusNode();
 
   @override
   void initState() {
@@ -187,35 +166,104 @@ class TipCalculatorState extends State<TipCalculator> {
     super.dispose();
   }
 
+  void calculate() {
+    setState(() {
+      final text = _billController.text.trim();
+      bill = double.tryParse(text) ?? 0.0;
+
+      if (bill > 0) {
+        tipAmount = bill * (tipPercent / 100);
+        totalAmount = bill + tipAmount;
+        // don't automatically kill rounding state here
+      } else {
+        tipAmount = 0.0;
+        totalAmount = 0.0;
+        roundedTipPercent = 0.0;
+        isRounding = false;
+      }
+    });
+  }
+
+  void roundUp() {
+    if (bill > 0) {
+      final tempTotal = totalAmount;
+      final roundedUpTotal = tempTotal.ceil();
+      final adjustedTipPercent =
+          (roundedUpTotal - bill) / bill * 100;
+
+      setState(() {
+        roundedTipPercent = adjustedTipPercent;
+        tipPercent = roundedTipPercent.clamp(0.0, 30.0);
+        calculate();
+        isRounding = true;
+      });
+    }
+  }
+
+  void roundDown() {
+    if (bill > 0) {
+      final tempTotal = totalAmount;
+      final roundedDownTotal = tempTotal.floor();
+      final adjustedTipPercent =
+          (roundedDownTotal - bill) / bill * 100;
+
+      setState(() {
+        roundedTipPercent = adjustedTipPercent;
+        tipPercent = roundedTipPercent.clamp(0.0, 30.0);
+        calculate();
+        isRounding = true;
+      });
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    final bool dark = widget.isDarkMode;
+    final Color panelColor = dark ? widget.darkModeColor : widget.primaryColor;
+    final Color textOnPanel = dark ? Colors.white : Colors.black;
+    final Color bgColor =
+        dark ? const Color(0xFF121212) : Colors.white;
+
     return GestureDetector(
       onTap: () {
-        // Dismiss keyboard when tapping anywhere else
-        if (!_billFocusNode.hasFocus) return;
-        _billFocusNode.unfocus();
+        if (_billFocusNode.hasFocus) {
+          _billFocusNode.unfocus();
+        }
       },
       child: Scaffold(
+        backgroundColor: bgColor,
         appBar: AppBar(
           title: Text(
             'uTip',
             style: TextStyle(
               fontWeight: FontWeight.bold,
-              fontSize: 24,
-              color: widget.isDarkMode ? Colors.white : Colors.black,
+              fontSize: 26, // this will still get scaled by textScaleFactor
+              color: dark ? Colors.white : Colors.black,
             ),
           ),
           centerTitle: true,
-          backgroundColor:
-              widget.isDarkMode ? widget.darkModeColor : widget.primaryColor,
+          backgroundColor: panelColor,
+
+          // ACCESSIBILITY: Add tooltips so VoiceOver/TalkBack reads them
           actions: [
             IconButton(
               icon: Icon(
-                widget.isDarkMode ? Icons.wb_sunny : Icons.nightlight_round,
-                color: widget.isDarkMode
-                    ? Colors.white
-                    : Colors.black, // Change icon color
+                widget.isLargeText
+                    ? Icons.text_decrease
+                    : Icons.text_increase,
+                color: dark ? Colors.white : Colors.black,
               ),
+              tooltip: widget.isLargeText
+                  ? 'Reduce text size'
+                  : 'Increase text size',
+              onPressed: widget.onTextScaleToggle,
+            ),
+            IconButton(
+              icon: Icon(
+                dark ? Icons.wb_sunny : Icons.nightlight_round,
+                color: dark ? Colors.white : Colors.black,
+              ),
+              tooltip: dark ? 'Switch to light mode' : 'Switch to dark mode',
               onPressed: widget.onThemeToggle,
             ),
           ],
@@ -225,222 +273,254 @@ class TipCalculatorState extends State<TipCalculator> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
-              // Bill and Tip Inputs
+              // Bill / Tip box
               Container(
-                padding: EdgeInsets.all(16.0),
+                padding: const EdgeInsets.all(16.0),
                 decoration: BoxDecoration(
-                  color: widget.isDarkMode
-                      ? widget.darkModeColor
-                      : widget.primaryColor,
+                  color: panelColor,
                   borderRadius: BorderRadius.circular(16.0),
-                  boxShadow: [
-                    BoxShadow(color: Colors.black26, blurRadius: 8.0)
+                  boxShadow: const [
+                    BoxShadow(color: Colors.black26, blurRadius: 8.0),
                   ],
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: <Widget>[
+                    // Bill row
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Text("Bill:",
-                            style: TextStyle(
-                                fontSize: 18,
-                                fontWeight: FontWeight.bold,
-                                color: widget.isDarkMode
-                                    ? Colors.white
-                                    : Colors.black)),
+                        Text(
+                          'Bill:',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            color: textOnPanel,
+                          ),
+                        ),
                         SizedBox(
-                          width: 100,
+                          width: 110,
                           child: TextField(
                             controller: _billController,
                             focusNode: _billFocusNode,
-                            keyboardType: TextInputType.numberWithOptions(
-                                decimal:
-                                    true),
+                            keyboardType:
+                                const TextInputType.numberWithOptions(
+                                    decimal: true),
                             inputFormatters: [
-                              FilteringTextInputFormatter.allow(RegExp(
-                                  r'^\d+\.?\d{0,2}')),
-                              LengthLimitingTextInputFormatter(
-                                  10),
+                              FilteringTextInputFormatter.allow(
+                                RegExp(r'^\d+\.?\d{0,2}'),
+                              ),
+                              LengthLimitingTextInputFormatter(10),
                             ],
                             onChanged: (_) => calculate(),
                             style: TextStyle(
-                              fontSize: _billController.text.isEmpty ? 16 : 18,
+                              fontSize:
+                                  _billController.text.isEmpty ? 16 : 18,
                               fontWeight: _billController.text.isEmpty
                                   ? FontWeight.normal
-                                  : FontWeight
-                                      .bold, 
-                              color: widget.isDarkMode
-                                  ? Colors.white
-                                  : Colors.black,
+                                  : FontWeight.bold,
+                              color: textOnPanel,
                             ),
                             decoration: InputDecoration(
                               hintText: 'Enter Bill',
-                              prefixText: '\$', 
+                              prefixText: '\$',
+                              // Announce this clearly to screen readers
+                              labelText: 'Bill amount',
+                              labelStyle: TextStyle(
+                                color: textOnPanel.withOpacity(0.8),
+                              ),
                               hintStyle: TextStyle(
-                                color: widget.isDarkMode
-                                    ? Colors.white
-                                    : Colors
-                                        .black,
+                                color: textOnPanel.withOpacity(0.7),
+                              ),
+                              enabledBorder: UnderlineInputBorder(
+                                borderSide: BorderSide(
+                                  color: textOnPanel.withOpacity(0.5),
+                                ),
+                              ),
+                              focusedBorder: UnderlineInputBorder(
+                                borderSide: BorderSide(
+                                  color: textOnPanel,
+                                  width: 2,
+                                ),
                               ),
                             ),
                           ),
                         ),
                       ],
                     ),
-                    SizedBox(height: 16),
+                    const SizedBox(height: 16),
+
+                    // Tip row
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         Text(
-                          "Tip:",
+                          'Tip:',
                           style: TextStyle(
                             fontSize: 18,
                             fontWeight: FontWeight.bold,
-                            color: widget.isDarkMode
-                                ? Colors.white
-                                : Colors
-                                    .black, // Adjust text color based on the theme
+                            color: textOnPanel,
                           ),
                         ),
                         Text(
-                          '\$${tipAmount.toStringAsFixed(2)}', // Display the formatted tip amount
+                          '\$${tipAmount.toStringAsFixed(2)}',
                           style: TextStyle(
                             fontSize: 18,
                             fontWeight: FontWeight.bold,
-                            color: widget.isDarkMode
-                                ? Colors.white
-                                : Colors
-                                    .black, // Adjust text color based on the theme
+                            color: textOnPanel,
                           ),
                         ),
                       ],
                     ),
-                    SizedBox(height: 16),
+                    const SizedBox(height: 16),
+
+                    // Tip Percentage row with slider
                     Row(
+                      crossAxisAlignment: CrossAxisAlignment.center,
                       children: <Widget>[
-                        Text("Tip Percentage:",
-                            style: TextStyle(
-                                fontSize: 18,
-                                fontWeight: FontWeight.bold,
-                                color: widget.isDarkMode
-                                    ? Colors.white
-                                    : Colors.black)),
-                        Expanded(
-                          child: Slider(
-                            value: tipPercent,
-                            min: 0,
-                            max: 30,
-                            divisions: 30,
-                            label: '${tipPercent.toStringAsFixed(0)}%',
-                            onChanged: (newValue) {
-                              if (bill > 0) {
-                                setState(() {
-                                  tipPercent = newValue;
-                                  calculate();
-                                  isRounding = false;
-                                });
-                              }
-                            },
-                            activeColor:
-                                widget.isDarkMode ? Colors.white : Colors.black,
-                            inactiveColor: Colors.grey,
+                        Text(
+                          'Tip Percentage:',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            color: textOnPanel,
                           ),
                         ),
-                        Text(
-                          '${isRounding ? roundedTipPercent.toStringAsFixed(2) : tipPercent.toStringAsFixed(0)}%',
-                          style: TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                              color: widget.isDarkMode
+
+                        // Slider should be accessible: wrap in Semantics
+                        Expanded(
+                          child: Semantics(
+                            label: 'Tip percentage slider',
+                            // This will be read like "Tip percentage slider, 19 percent"
+                            value:
+                                '${tipPercent.toStringAsFixed(0)} percent',
+                            increasedValue:
+                                '${(tipPercent + 1).clamp(0, 30).toStringAsFixed(0)} percent',
+                            decreasedValue:
+                                '${(tipPercent - 1).clamp(0, 30).toStringAsFixed(0)} percent',
+                            hint:
+                                'Swipe up or right to increase. Swipe down or left to decrease.',
+                            child: Slider(
+                              value: tipPercent,
+                              min: 0,
+                              max: 30,
+                              divisions: 30,
+                              label:
+                                  '${tipPercent.toStringAsFixed(0)}%',
+                              onChanged: (newValue) {
+                                if (bill > 0) {
+                                  setState(() {
+                                    tipPercent = newValue;
+                                    calculate();
+                                    isRounding = false;
+                                  });
+                                }
+                              },
+                              activeColor: dark
                                   ? Colors.white
-                                  : Colors.black),
+                                  : Colors.black,
+                              inactiveColor: Colors.grey,
+                            ),
+                          ),
+                        ),
+
+                        Text(
+                          '${isRounding ? roundedTipPercent.toStringAsFixed(2)
+                                         : tipPercent.toStringAsFixed(0)}%',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            color: textOnPanel,
+                          ),
                         ),
                       ],
                     ),
                   ],
                 ),
               ),
-              SizedBox(height: 16),
 
-              // Total Amount Box
+              const SizedBox(height: 16),
+
+              // Total box
               Container(
-                padding: EdgeInsets.all(16.0),
+                padding: const EdgeInsets.all(16.0),
                 decoration: BoxDecoration(
-                  color: widget.isDarkMode
-                      ? widget.darkModeColor
-                      : widget.primaryColor,
+                  color: panelColor,
                   borderRadius: BorderRadius.circular(16.0),
-                  boxShadow: [
-                    BoxShadow(color: Colors.black26, blurRadius: 8.0)
+                  boxShadow: const [
+                    BoxShadow(color: Colors.black26, blurRadius: 8.0),
                   ],
                 ),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text("Total:",
-                        style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                            color: widget.isDarkMode
-                                ? Colors.white
-                                : Colors.black)),
+                    Text(
+                      'Total:',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: textOnPanel,
+                      ),
+                    ),
                     Text(
                       '\$${totalAmount.toStringAsFixed(2)}',
                       style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                          color:
-                              widget.isDarkMode ? Colors.white : Colors.black),
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: textOnPanel,
+                      ),
                     ),
                   ],
                 ),
               ),
-              SizedBox(height: 16),
 
-              // Two buttons for rounding (centered and primary color)
+              const SizedBox(height: 16),
+
+              // Action buttons
               Center(
                 child: Column(
                   children: [
-                    ElevatedButton(
-                      onPressed: roundUp,
-                      style: ElevatedButton.styleFrom(
-                        foregroundColor: Colors.black,
-                        backgroundColor: widget.isDarkMode
-                            ? widget.darkModeColor
-                            : widget.primaryColor,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8.0),
+                    Semantics(
+                      // Help screen reader announce what this does
+                      button: true,
+                      label:
+                          'Round up to nearest whole dollar total',
+                      child: ElevatedButton(
+                        onPressed: roundUp,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: panelColor,
+                          foregroundColor: textOnPanel,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8.0),
+                          ),
                         ),
-                      ),
-                      child: Text(
-                        "Round up to nearest dollar",
-                        style: TextStyle(
-                          color:
-                              widget.isDarkMode ? Colors.white : Colors.black,
-                          fontWeight: FontWeight.bold,
+                        child: const Text(
+                          'Round up to nearest dollar',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
                       ),
                     ),
-                    SizedBox(height: 8),
-                    ElevatedButton(
-                      onPressed: roundDown,
-                      style: ElevatedButton.styleFrom(
-                        foregroundColor: Colors.black,
-                        backgroundColor: widget.isDarkMode
-                            ? widget.darkModeColor
-                            : widget.primaryColor,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8.0),
+                    const SizedBox(height: 8),
+                    Semantics(
+                      button: true,
+                      label:
+                          'Round down to nearest whole dollar total',
+                      child: ElevatedButton(
+                        onPressed: roundDown,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: panelColor,
+                          foregroundColor: textOnPanel,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8.0),
+                          ),
                         ),
-                      ),
-                      child: Text(
-                        "Round down to nearest dollar",
-                        style: TextStyle(
-                          color:
-                              widget.isDarkMode ? Colors.white : Colors.black,
-                          fontWeight: FontWeight.bold,
+                        child: const Text(
+                          'Round down to nearest dollar',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
                       ),
                     ),
